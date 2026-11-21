@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shadow Protocol</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0a0c10; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  #ui { position: fixed; top: 12px; left: 12px; color: #e8e6e3; font: 14px 'Segoe UI', system-ui, sans-serif; pointer-events: none; z-index: 10; }
+  #ui .row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+  #ui .label { opacity: 0.7; }
+  #ui .value { font-weight: 600; }
+  #ui .bar-wrap { width: 160px; height: 8px; background: #1e222a; border-radius: 4px; overflow: hidden; }
+  #ui .bar { height: 100%; background: linear-gradient(90deg, #4ade80, #22c55e); transition: width 0.2s, background 0.2s; }
+  #ui .bar.warn { background: linear-gradient(90deg, #fbbf24, #f59e0b); }
+  #ui .bar.danger { background: linear-gradient(90deg, #f87171, #ef4444); }
+  #msg { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); color: #e8e6e3; font: 16px 'Segoe UI', system-ui, sans-serif; text-align: center; text-shadow: 0 2px 8px #000; pointer-events: none; opacity: 0; transition: opacity 0.3s; z-index: 10; }
+  #msg.show { opacity: 1; }
+  #level-complete { position: fixed; inset: 0; background: rgba(10,12,16,0.92); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.4s; }
+  #level-complete.show { opacity: 1; pointer-events: auto; }
+  #level-complete h1 { margin: 0; font-size: 48px; color: #4ade80; text-shadow: 0 0 24px #22c55e; }
+  #level-complete p { margin: 0; font-size: 18px; color: #9ca3af; }
+  #level-complete button { padding: 12px 32px; font-size: 16px; font-weight: 600; color: #0a0c10; background: #4ade80; border: none; border-radius: 8px; cursor: pointer; transition: background 0.2s, transform 0.1s; }
+  #level-complete button:hover { background: #22c55e; }
+  #level-complete button:active { transform: scale(0.98); }
+  #game-over { position: fixed; inset: 0; background: rgba(10,12,16,0.95); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.4s; }
+  #game-over.show { opacity: 1; pointer-events: auto; }
+  #game-over h1 { margin: 0; font-size: 48px; color: #f87171; text-shadow: 0 0 24px #ef4444; }
+  #game-over p { margin: 0; font-size: 18px; color: #9ca3af; }
+  #game-over button { padding: 12px 32px; font-size: 16px; font-weight: 600; color: #0a0c10; background: #f87171; border: none; border-radius: 8px; cursor: pointer; transition: background 0.2s, transform 0.1s; }
+  #game-over button:hover { background: #ef4444; }
+  #game-over button:active { transform: scale(0.98); }
+  #title-screen { position: fixed; inset: 0; background: #0a0c10; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; z-index: 200; }
+  #title-screen h1 { margin: 0; font-size: 64px; font-weight: 800; background: linear-gradient(135deg, #4ade80, #22c55e, #06b6d4); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; text-shadow: 0 0 40px rgba(34,197,94,0.4); letter-spacing: 4px; }
+  #title-screen .subtitle { color: #6b7280; font-size: 16px; letter-spacing: 2px; text-transform: uppercase; }
+  #title-screen .controls { color: #9ca3af; font-size: 14px; line-height: 2; text-align: center; max-width: 400px; }
+  #title-screen .controls kbd { display: inline-block; padding: 4px 10px; background: #1e222a; border: 1px solid #374151; border-radius: 6px; font-family: inherit; font-size: 13px; margin: 0 2px; }
+  #title-screen button { padding: 16px 48px; font-size: 18px; font-weight: 700; color: #0a0c10; background: linear-gradient(135deg, #4ade80, #22c55e); border: none; border-radius: 10px; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; text-transform: uppercase; letter-spacing: 2px; }
+  #title-screen button:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(34,197,94,0.4); }
+  #title-screen button:active { transform: translateY(0); }
+  @media (max-width: 600px) {
+    #title-screen h1 { font-size: 42px; }
+    #ui { top: 8px; left: 8px; font-size: 12px; }
+    #ui .bar-wrap { width: 120px; }
+  }
+</style>
+</head>
+<body>
+<canvas id="game" aria-label="Shadow Protocol: a top-down stealth game. Navigate past guards using cover and reach the exit unseen."></canvas>
+<p id="status" role="status" aria-live="polite"></p>
+<div id="ui">
+  <div class="row"><span class="label">LEVEL</span><span class="value" id="ui-level">1</span></div>
+  <div class="row"><span class="label">ALERT</span><div class="bar-wrap"><div class="bar" id="ui-alert" style="width: 0%"></div></div></div>
+  <div class="row"><span class="label">STEALTH</span><div class="bar-wrap"><div class="bar" id="ui-stealth" style="width: 100%"></div></div></div>
+</div>
+<div id="msg"></div>
+<div id="level-complete"><h1>SECTOR CLEARED</h1><p>Moving to next sector...</p><button id="next-level-btn">CONTINUE</button></div>
+<div id="game-over"><h1>COMPROMISED</h1><p>Your presence has been detected.</p><button id="retry-btn">RETRY SECTOR</button></div>
+<div id="title-screen">
+  <h1>SHADOW PROTOCOL</h1>
+  <div class="subtitle">A Top-Down Stealth Infiltration Game</div>
+  <div class="controls">
+    Move: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or <kbd>Arrow Keys</kbd><br>
+    Sneak (slow, silent): Hold <kbd>Shift</kbd><br>
+    Interact / Open Exit: <kbd>E</kbd> or <kbd>Space</kbd><br>
+    Pause: <kbd>Esc</kbd>
+  </div>
+  <button id="start-btn">BEGIN INFILTRATION</button>
+</div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
